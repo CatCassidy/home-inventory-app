@@ -7,7 +7,6 @@ import av
 import speech_recognition as sr
 import tempfile
 import json
-import re
 
 # Google Sheets setup
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -15,12 +14,12 @@ GOOGLE_CREDENTIALS = json.loads(st.secrets["GOOGLE_CREDENTIALS"])
 creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
 client = gspread.authorize(creds)
 
-# Replace this with the name of your Google Sheet
 SHEET_NAME = "Home Inventory"
 sheet = client.open(SHEET_NAME).sheet1
 
 st.title("🏠 Home Inventory App")
 st.caption("🔧 Voice input version: Manual Trigger v1.1")
+
 # --- Voice Input Section ---
 st.subheader("🎙️ Voice Input")
 
@@ -66,12 +65,14 @@ if use_voice:
             except Exception as e:
                 st.error(f"Error during transcription: {e}")
 
-with st.form("add_item"):
-   item_name = st.text_input("Item Name", value=spoken_text)
-container = st.text_input("Container / Label (Box 12, Team GB Suitcase, or (Standalone))")
-location = st.text_input("Location (e.g. Old Southeast Loft, Garage, Keller)")
-notes = st.text_input("Notes (optional)")
+# --- Add Item Form ---
+st.header("📦 Add New Item (with optional voice input)")
 
+with st.form("add_item"):
+    item_name = st.text_input("Item Name", value=spoken_text)
+    container = st.text_input("Container / Label (Box 12, Team GB Suitcase, or (Standalone))")
+    location = st.text_input("Location (e.g. Old Southeast Loft, Garage, Keller)")
+    notes = st.text_input("Notes (optional)")
     submitted = st.form_submit_button("Add to Inventory")
 
     if submitted and item_name and location:
