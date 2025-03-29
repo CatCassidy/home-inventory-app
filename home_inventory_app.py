@@ -20,6 +20,7 @@ SHEET_NAME = "Home Inventory"
 sheet = client.open(SHEET_NAME).sheet1
 
 st.title("🏠 Home Inventory App")
+st.caption("🔧 Voice input version: Manual Trigger v1.1")
 
 # --- Add Item Form with Voice Input ---
 st.header("📦 Add New Item (with optional voice input)")
