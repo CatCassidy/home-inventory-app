@@ -7,6 +7,7 @@ import av
 import speech_recognition as sr
 import tempfile
 import json
+import time
 
 # Google Sheets setup
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -20,68 +21,69 @@ sheet = client.open(SHEET_NAME).sheet1
 st.title("🏠 Home Inventory App")
 st.caption("🔧 Voice input version: Manual Trigger v1.1")
 
+# Initialize session state for voice input
+if 'spoken_text' not in st.session_state:
+    st.session_state.spoken_text = ""
+if 'audio_ready' not in st.session_state:
+    st.session_state.audio_ready = False
+if 'audio_file_path' not in st.session_state:
+    st.session_state.audio_file_path = None
+
 # --- Voice Input Section ---
 st.subheader("🎙️ Voice Input")
 
 use_voice = st.toggle("Enable voice input")
 
-spoken_text = ""
-audio_ready = False
-audio_file_path = None
-
 if use_voice:
-    st.info("Tap Start, speak clearly, then tap Stop. Then click 'Process Voice Input'.")
+    st.info("1. Tap START and speak clearly\n2. Tap STOP when finished\n3. Click PROCESS VOICE INPUT")
+
+    def audio_frame_callback(frame):
+        if not hasattr(audio_frame_callback, "audio_buffer"):
+            audio_frame_callback.audio_buffer = []
+        audio_frame_callback.audio_buffer.append(frame.to_ndarray().tobytes())
+        return frame
 
     webrtc_ctx = webrtc_streamer(
-        key="voice_input",
-        audio_receiver_size=256,
+        key="voice-input",
+        mode="sendonly",
+        audio_frame_callback=audio_frame_callback,
         media_stream_constraints={"audio": True, "video": False},
-        async_processing=True,
+        async_processing=True
     )
 
-    import time
-
-    if webrtc_ctx.audio_receiver:
-        audio_buffer = []
-
+    if webrtc_ctx.state.playing == False and hasattr(audio_frame_callback, "audio_buffer"):
         try:
-            # Wait for a short time to ensure mic is ready
-            time.sleep(1)
-
-            # Grab audio frames from stream
-            audio_frames = webrtc_ctx.audio_receiver.get_frames(timeout=5)
-            audio_buffer = [f.to_ndarray().tobytes() for f in audio_frames]
-
-            if audio_buffer:
-                audio = b"".join(audio_buffer)
-
-                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                    f.write(audio)
-                    audio_file_path = f.name
-                    audio_ready = True
+            audio_data = b"".join(audio_frame_callback.audio_buffer)
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                f.write(audio_data)
+                st.session_state.audio_file_path = f.name
+                st.session_state.audio_ready = True
+                st.success("✅ Audio captured!")
         except Exception as e:
-            st.error("⚠️ Failed to capture audio. Try again.")
-            audio_ready = False
+            st.error(f"Error saving audio: {e}")
+        finally:
+            del audio_frame_callback.audio_buffer
 
-
-    if audio_ready and audio_file_path:
+    if st.session_state.audio_ready and st.session_state.audio_file_path:
         if st.button("Process Voice Input"):
             r = sr.Recognizer()
             try:
-                with sr.AudioFile(audio_file_path) as source:
+                with sr.AudioFile(st.session_state.audio_file_path) as source:
                     audio_data = r.record(source)
-                    spoken_text = r.recognize_google(audio_data)
-                    st.success(f"🎤 Transcription: {spoken_text}")
+                    st.session_state.spoken_text = r.recognize_google(audio_data)
+                    st.success(f"🎤 Transcription: {st.session_state.spoken_text}")
             except sr.UnknownValueError:
-                st.warning("⚠️ Could not understand the audio.")
+                st.warning("Google Speech Recognition could not understand audio")
+            except sr.RequestError as e:
+                st.error(f"Could not request results from Google Speech Recognition service; {e}")
             except Exception as e:
-                st.error(f"Error during transcription: {e}")
+                st.error(f"Unexpected error: {e}")
 
 # --- Add Item Form ---
 st.header("📦 Add New Item (with optional voice input)")
 
 with st.form("add_item"):
-    item_name = st.text_input("Item Name", value=spoken_text)
+    item_name = st.text_input("Item Name", value=st.session_state.spoken_text)
     container = st.text_input("Container / Label (Box 12, Team GB Suitcase, or (Standalone))")
     location = st.text_input("Location (e.g. Old Southeast Loft, Garage, Keller)")
     notes = st.text_input("Notes (optional)")
@@ -99,7 +101,7 @@ search_query = st.text_input("What are you looking for?")
 
 if search_query:
     records = sheet.get_all_records()
-    results = [row for row in records if search_query.lower() in row["Item Name"].lower()]
+    results = [row for row in records if search_query.lower() in str(row["Item Name"]).lower()]
     if results:
         st.write(f"Found {len(results)} result(s):")
         st.table(results)
