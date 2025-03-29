@@ -27,10 +27,11 @@ st.header("📦 Add New Item (with optional voice input)")
 spoken_text = ""
 parsed_data = {"item_name": "", "container": "", "location": "", "notes": ""}
 
+audio_data_buffer = None
 use_voice = st.toggle("🎙️ Enable voice input")
 
 if use_voice:
-    st.info("Tap Start, speak clearly, then tap Stop to process your voice input")
+    st.info("Tap Start, speak clearly, then tap Stop. Once stopped, click 'Process voice input' to continue.")
 
     webrtc_ctx = webrtc_streamer(
         key="speech",
@@ -41,13 +42,23 @@ if use_voice:
 
     r = sr.Recognizer()
 
-    if webrtc_ctx.state.playing is False and webrtc_ctx.audio_receiver:
-        try:
-            audio_frames = webrtc_ctx.audio_receiver.get_frames(timeout=5)
-            audio = b"".join([f.to_ndarray().tobytes() for f in audio_frames])
+    if "audio_bytes" not in st.session_state:
+        st.session_state.audio_bytes = None
 
+    if webrtc_ctx.audio_receiver and not webrtc_ctx.state.playing:
+        try:
+            st.write("🔄 Capturing audio frames...")
+            audio_frames = webrtc_ctx.audio_receiver.get_frames(timeout=5)
+            audio_data_buffer = b"".join([f.to_ndarray().tobytes() for f in audio_frames])
+            st.session_state.audio_bytes = audio_data_buffer
+            st.success("✅ Audio captured. Now click 'Process voice input'.")
+        except Exception as e:
+            st.warning("⚠️ No audio captured yet or timeout.")
+
+    if st.button("▶️ Process voice input") and st.session_state.audio_bytes:
+        try:
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                f.write(audio)
+                f.write(st.session_state.audio_bytes)
                 f.flush()
                 with sr.AudioFile(f.name) as source:
                     audio_data = r.record(source)
@@ -71,16 +82,13 @@ if use_voice:
                         if any(loc in word for loc in locations):
                             parsed_data["location"] = word.title()
 
-                    # Use regex to extract possible container like 'Box 12'
                     match = re.search(r"(Box|Suitcase|Container)\s*\d+", spoken_text, re.IGNORECASE)
                     if match:
                         parsed_data["container"] = match.group(0)
 
-                    # Item name is the remaining portion
                     parsed_data["item_name"] = spoken_text.split(" are ")[0].strip().title()
-
         except Exception as e:
-            st.warning("⚠️ Voice input failed. Try again.")
+            st.warning("⚠️ Voice processing failed. Try again.")
 
 with st.form("add_item"):
     item_name = st.text_input("Item Name", value=parsed_data["item_name"] or spoken_text)
