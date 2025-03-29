@@ -6,14 +6,13 @@ from streamlit_webrtc import webrtc_streamer
 import av
 import speech_recognition as sr
 import tempfile
+import json
+import re
 
 # Google Sheets setup
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-import json
-
 GOOGLE_CREDENTIALS = json.loads(st.secrets["GOOGLE_CREDENTIALS"])
 creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
-
 client = gspread.authorize(creds)
 
 # Replace this with the name of your Google Sheet
@@ -26,22 +25,23 @@ st.title("🏠 Home Inventory App")
 st.header("📦 Add New Item (with optional voice input)")
 
 spoken_text = ""
+parsed_data = {"item_name": "", "container": "", "location": "", "notes": ""}
 
 use_voice = st.toggle("🎙️ Enable voice input")
 
 if use_voice:
-    st.info("Speak clearly and wait for processing...")
+    st.info("Tap Start, speak clearly, then tap Stop to process your voice input")
 
     webrtc_ctx = webrtc_streamer(
         key="speech",
         audio_receiver_size=256,
         media_stream_constraints={"audio": True, "video": False},
-        async_processing=True,
+        async_processing=False,
     )
 
     r = sr.Recognizer()
 
-    if webrtc_ctx.audio_receiver:
+    if webrtc_ctx.state.playing is False and webrtc_ctx.audio_receiver:
         try:
             audio_frames = webrtc_ctx.audio_receiver.get_frames(timeout=5)
             audio = b"".join([f.to_ndarray().tobytes() for f in audio_frames])
@@ -53,14 +53,40 @@ if use_voice:
                     audio_data = r.record(source)
                     spoken_text = r.recognize_google(audio_data)
                     st.success(f"🎤 You said: {spoken_text}")
+
+                    # Simple parsing logic
+                    spoken_text_lower = spoken_text.lower()
+                    if "note:" in spoken_text_lower:
+                        parts = spoken_text_lower.split("note:")
+                        spoken_text_lower = parts[0].strip()
+                        parsed_data["notes"] = parts[1].strip()
+
+                    # Look for common patterns
+                    container_keywords = ["box", "suitcase", "standalone"]
+                    locations = ["loft", "garage", "shed", "keller", "locker", "chest"]
+
+                    for word in spoken_text_lower.split():
+                        if any(ck in word for ck in container_keywords):
+                            parsed_data["container"] = word.title()
+                        if any(loc in word for loc in locations):
+                            parsed_data["location"] = word.title()
+
+                    # Use regex to extract possible container like 'Box 12'
+                    match = re.search(r"(Box|Suitcase|Container)\s*\d+", spoken_text, re.IGNORECASE)
+                    if match:
+                        parsed_data["container"] = match.group(0)
+
+                    # Item name is the remaining portion
+                    parsed_data["item_name"] = spoken_text.split(" are ")[0].strip().title()
+
         except Exception as e:
             st.warning("⚠️ Voice input failed. Try again.")
 
 with st.form("add_item"):
-    item_name = st.text_input("Item Name", value=spoken_text if use_voice else "")
-    container = st.text_input("Container / Label (Box 12, Team GB Suitcase, or (Standalone))")
-    location = st.text_input("Location (e.g. Old Southeast Loft, Garage, Keller)")
-    notes = st.text_input("Notes (optional)")
+    item_name = st.text_input("Item Name", value=parsed_data["item_name"] or spoken_text)
+    container = st.text_input("Container / Label (Box 12, Team GB Suitcase, or (Standalone))", value=parsed_data["container"])
+    location = st.text_input("Location (e.g. Old Southeast Loft, Garage, Keller)", value=parsed_data["location"])
+    notes = st.text_input("Notes (optional)", value=parsed_data["notes"])
     submitted = st.form_submit_button("Add to Inventory")
 
     if submitted and item_name and location:
@@ -81,3 +107,4 @@ if search_query:
         st.table(results)
     else:
         st.warning("Item not found.")
+
