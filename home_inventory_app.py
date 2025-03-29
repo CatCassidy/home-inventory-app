@@ -31,7 +31,7 @@ audio_data_buffer = None
 use_voice = st.toggle("🎙️ Enable voice input")
 
 if use_voice:
-    st.info("Tap Start, speak clearly, then tap Stop. Once stopped, click 'Process voice input' to continue.")
+    st.info("Tap Start, speak clearly, then tap Stop. Then click 'Process Voice Input'.")
 
     webrtc_ctx = webrtc_streamer(
         key="speech",
@@ -47,16 +47,16 @@ if use_voice:
 
     if webrtc_ctx.audio_receiver and not webrtc_ctx.state.playing:
         try:
-            st.write("🔄 Capturing audio frames...")
-            audio_frames = webrtc_ctx.audio_receiver.get_frames(timeout=5)
-            audio_data_buffer = b"".join([f.to_ndarray().tobytes() for f in audio_frames])
-            st.session_state.audio_bytes = audio_data_buffer
-            st.success("✅ Audio captured. Now click 'Process voice input'.")
+            st.write("🔄 Capturing audio...")
+            audio_frames = webrtc_ctx.audio_receiver.get_frames(timeout=3)
+            st.session_state.audio_bytes = b"".join([f.to_ndarray().tobytes() for f in audio_frames])
+            st.success("✅ Audio captured. Now click the button below.")
         except Exception as e:
-            st.warning("⚠️ No audio captured yet or timeout.")
+            st.warning("⚠️ No audio or capture failed.")
 
-    if st.button("▶️ Process voice input") and st.session_state.audio_bytes:
+    if st.session_state.audio_bytes and st.button("▶️ Process Voice Input"):
         try:
+            st.write("🧠 Processing voice input...")
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
                 f.write(st.session_state.audio_bytes)
                 f.flush()
@@ -65,14 +65,14 @@ if use_voice:
                     spoken_text = r.recognize_google(audio_data)
                     st.success(f"🎤 You said: {spoken_text}")
 
-                    # Simple parsing logic
+                    # Start parsing
                     spoken_text_lower = spoken_text.lower()
+
                     if "note:" in spoken_text_lower:
                         parts = spoken_text_lower.split("note:")
                         spoken_text_lower = parts[0].strip()
                         parsed_data["notes"] = parts[1].strip()
 
-                    # Look for common patterns
                     container_keywords = ["box", "suitcase", "standalone"]
                     locations = ["loft", "garage", "shed", "keller", "locker", "chest"]
 
@@ -87,8 +87,9 @@ if use_voice:
                         parsed_data["container"] = match.group(0)
 
                     parsed_data["item_name"] = spoken_text.split(" are ")[0].strip().title()
+
         except Exception as e:
-            st.warning("⚠️ Voice processing failed. Try again.")
+            st.warning(f"⚠️ Processing failed: {e}")
 
 with st.form("add_item"):
     item_name = st.text_input("Item Name", value=parsed_data["item_name"] or spoken_text)
@@ -115,4 +116,3 @@ if search_query:
         st.table(results)
     else:
         st.warning("Item not found.")
-
