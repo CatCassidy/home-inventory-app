@@ -67,7 +67,7 @@ if use_voice:
                 st.error(f"Error during transcription: {e}")
 
 with st.form("add_item"):
-    item_name = st.text_input("Item Name", value=parsed_data["item_name"] or spoken_text)
+   item_name = st.text_input("Item Name", value=spoken_text)
     container = st.text_input("Container / Label (Box 12, Team GB Suitcase, or (Standalone))", value=parsed_data["container"])
     location = st.text_input("Location (e.g. Old Southeast Loft, Garage, Keller)", value=parsed_data["location"])
     notes = st.text_input("Notes (optional)", value=parsed_data["notes"])
