@@ -68,9 +68,10 @@ if use_voice:
 
 with st.form("add_item"):
    item_name = st.text_input("Item Name", value=spoken_text)
-    container = st.text_input("Container / Label (Box 12, Team GB Suitcase, or (Standalone))", value=parsed_data["container"])
-    location = st.text_input("Location (e.g. Old Southeast Loft, Garage, Keller)", value=parsed_data["location"])
-    notes = st.text_input("Notes (optional)", value=parsed_data["notes"])
+container = st.text_input("Container / Label (Box 12, Team GB Suitcase, or (Standalone))")
+location = st.text_input("Location (e.g. Old Southeast Loft, Garage, Keller)")
+notes = st.text_input("Notes (optional)")
+
     submitted = st.form_submit_button("Add to Inventory")
 
     if submitted and item_name and location:
