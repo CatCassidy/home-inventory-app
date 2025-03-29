@@ -2,7 +2,7 @@ import streamlit as st
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
-from streamlit_webrtc import webrtc_streamer
+from streamlit_webrtc import webrtc_streamer, WebRtcMode  # ✅ Fixed import
 import av
 import speech_recognition as sr
 import tempfile
@@ -19,9 +19,9 @@ SHEET_NAME = "Home Inventory"
 sheet = client.open(SHEET_NAME).sheet1
 
 st.title("🏠 Home Inventory App")
-st.caption("🔧 Voice input version: Manual Trigger v1.1")
+st.caption("🔧 Voice input version: Manual Trigger v1.2")
 
-# Initialize session state for voice input
+# Initialize session state
 if 'spoken_text' not in st.session_state:
     st.session_state.spoken_text = ""
 if 'audio_ready' not in st.session_state:
@@ -45,13 +45,13 @@ if use_voice:
 
     webrtc_ctx = webrtc_streamer(
         key="voice-input",
-        mode="sendonly",
+        mode=WebRtcMode.SENDONLY,  # ✅ Correct enum usage
         audio_frame_callback=audio_frame_callback,
         media_stream_constraints={"audio": True, "video": False},
         async_processing=True
     )
 
-    if webrtc_ctx.state.playing == False and hasattr(audio_frame_callback, "audio_buffer"):
+    if webrtc_ctx.state.playing is False and hasattr(audio_frame_callback, "audio_buffer"):
         try:
             audio_data = b"".join(audio_frame_callback.audio_buffer)
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
@@ -65,7 +65,7 @@ if use_voice:
             del audio_frame_callback.audio_buffer
 
     if st.session_state.audio_ready and st.session_state.audio_file_path:
-        if st.button("Process Voice Input"):
+        if st.button("🔎 Process Voice Input"):
             r = sr.Recognizer()
             try:
                 with sr.AudioFile(st.session_state.audio_file_path) as source:
