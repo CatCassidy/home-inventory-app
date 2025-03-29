@@ -39,18 +39,30 @@ if use_voice:
         async_processing=True,
     )
 
-    if webrtc_ctx.audio_receiver:
-        try:
-            audio_frames = webrtc_ctx.audio_receiver.get_frames(timeout=3)
-            audio = b"".join([f.to_ndarray().tobytes() for f in audio_frames])
+    import time
 
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                f.write(audio)
-                audio_file_path = f.name
-                audio_ready = True
+    if webrtc_ctx.audio_receiver:
+        audio_buffer = []
+
+        try:
+            # Wait for a short time to ensure mic is ready
+            time.sleep(1)
+
+            # Grab audio frames from stream
+            audio_frames = webrtc_ctx.audio_receiver.get_frames(timeout=5)
+            audio_buffer = [f.to_ndarray().tobytes() for f in audio_frames]
+
+            if audio_buffer:
+                audio = b"".join(audio_buffer)
+
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                    f.write(audio)
+                    audio_file_path = f.name
+                    audio_ready = True
         except Exception as e:
-            st.warning("⚠️ Voice recording failed. Try again.")
+            st.error("⚠️ Failed to capture audio. Try again.")
             audio_ready = False
+
 
     if audio_ready and audio_file_path:
         if st.button("Process Voice Input"):
