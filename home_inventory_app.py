@@ -21,76 +21,50 @@ sheet = client.open(SHEET_NAME).sheet1
 
 st.title("🏠 Home Inventory App")
 st.caption("🔧 Voice input version: Manual Trigger v1.1")
+# --- Voice Input Section ---
+st.subheader("🎙️ Voice Input")
 
-# --- Add Item Form with Voice Input ---
-st.header("📦 Add New Item (with optional voice input)")
+use_voice = st.toggle("Enable voice input")
 
 spoken_text = ""
-parsed_data = {"item_name": "", "container": "", "location": "", "notes": ""}
-
-audio_data_buffer = None
-use_voice = st.toggle("🎙️ Enable voice input")
+audio_ready = False
+audio_file_path = None
 
 if use_voice:
     st.info("Tap Start, speak clearly, then tap Stop. Then click 'Process Voice Input'.")
 
     webrtc_ctx = webrtc_streamer(
-        key="speech",
+        key="voice_input",
         audio_receiver_size=256,
         media_stream_constraints={"audio": True, "video": False},
-        async_processing=False,
+        async_processing=True,
     )
 
-    r = sr.Recognizer()
-
-    if "audio_bytes" not in st.session_state:
-        st.session_state.audio_bytes = None
-
-    if webrtc_ctx.audio_receiver and not webrtc_ctx.state.playing:
+    if webrtc_ctx.audio_receiver:
         try:
-            st.write("🔄 Capturing audio...")
             audio_frames = webrtc_ctx.audio_receiver.get_frames(timeout=3)
-            st.session_state.audio_bytes = b"".join([f.to_ndarray().tobytes() for f in audio_frames])
-            st.success("✅ Audio captured. Now click the button below.")
-        except Exception as e:
-            st.warning("⚠️ No audio or capture failed.")
+            audio = b"".join([f.to_ndarray().tobytes() for f in audio_frames])
 
-    if st.session_state.audio_bytes and st.button("▶️ Process Voice Input"):
-        try:
-            st.write("🧠 Processing voice input...")
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                f.write(st.session_state.audio_bytes)
-                f.flush()
-                with sr.AudioFile(f.name) as source:
+                f.write(audio)
+                audio_file_path = f.name
+                audio_ready = True
+        except Exception as e:
+            st.warning("⚠️ Voice recording failed. Try again.")
+            audio_ready = False
+
+    if audio_ready and audio_file_path:
+        if st.button("Process Voice Input"):
+            r = sr.Recognizer()
+            try:
+                with sr.AudioFile(audio_file_path) as source:
                     audio_data = r.record(source)
                     spoken_text = r.recognize_google(audio_data)
-                    st.success(f"🎤 You said: {spoken_text}")
-
-                    # Start parsing
-                    spoken_text_lower = spoken_text.lower()
-
-                    if "note:" in spoken_text_lower:
-                        parts = spoken_text_lower.split("note:")
-                        spoken_text_lower = parts[0].strip()
-                        parsed_data["notes"] = parts[1].strip()
-
-                    container_keywords = ["box", "suitcase", "standalone"]
-                    locations = ["loft", "garage", "shed", "keller", "locker", "chest"]
-
-                    for word in spoken_text_lower.split():
-                        if any(ck in word for ck in container_keywords):
-                            parsed_data["container"] = word.title()
-                        if any(loc in word for loc in locations):
-                            parsed_data["location"] = word.title()
-
-                    match = re.search(r"(Box|Suitcase|Container)\s*\d+", spoken_text, re.IGNORECASE)
-                    if match:
-                        parsed_data["container"] = match.group(0)
-
-                    parsed_data["item_name"] = spoken_text.split(" are ")[0].strip().title()
-
-        except Exception as e:
-            st.warning(f"⚠️ Processing failed: {e}")
+                    st.success(f"🎤 Transcription: {spoken_text}")
+            except sr.UnknownValueError:
+                st.warning("⚠️ Could not understand the audio.")
+            except Exception as e:
+                st.error(f"Error during transcription: {e}")
 
 with st.form("add_item"):
     item_name = st.text_input("Item Name", value=parsed_data["item_name"] or spoken_text)
