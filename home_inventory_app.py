@@ -9,7 +9,11 @@ import tempfile
 
 # Google Sheets setup
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("home-inventory-app-455211-be6402d32854.json", scope)
+import json
+
+GOOGLE_CREDENTIALS = json.loads(st.secrets["GOOGLE_CREDENTIALS"])
+creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
+
 client = gspread.authorize(creds)
 
 # Replace this with the name of your Google Sheet
